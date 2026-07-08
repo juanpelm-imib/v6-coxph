@@ -1,69 +1,181 @@
 {
   "name": "coxph",
-  "image": "v6-coxph",
-  "vantage6_version": "4.3",
+  "description": "Federated algorithm for a Cox proportional hazards model",
+  "image": "10.206.0.27:5000/coxph:1.0.2",
+  "code_url": "https://github.com/MaastrichtU-CDS/v6-coxph",
+  "vantage6_version": "5.0.0",
   "partitioning": "horizontal",
   "functions": [
     {
       "name": "central",
-      "description": "Federated algorithm for baseline hazard curve in Vantage6 v4",
-      "type": "central",
-      "databases": [],
-      "arguments": [
+      "display_name": "Cox proportional hazards model",
+      "description": "Fit a federated Cox proportional hazards model using Newton-Raphson iteration on the partial likelihood.",
+      "standalone": true,
+      "step_type": "central_compute",
+      "ui_visualizations": [
         {
-          "name": "time_col",
-          "type": "",
-          "description": ""
-        },
-        {
-          "name": "outcome_col",
-          "type": "",
-          "description": ""
-        },
-        {
-          "name": "expl_var",
-          "type": "",
-          "description": ""
-        },
-        {
-          "name": "organization_ids",
-          "type": "",
-          "description": ""
-        }
-      ]
-    },
-    {
-      "name": "get_unique_event_times",
-      "description": "",
-      "type": "federated",
-      "databases": [
-        {
-          "name": "Database 1"
-        },
-        {
-          "name": "Database 2"
+          "name": "Model coefficients",
+          "description": "Coefficient table for the fitted Cox model, including hazard ratios, standard errors, confidence intervals, Z- and p-values.",
+          "type": "table",
+          "schema": {
+            "location": [
+              "model"
+            ],
+            "columns": []
+          }
         }
       ],
       "arguments": [
         {
           "name": "time_col",
-          "type": "",
-          "description": ""
+          "display_name": "Time column",
+          "description": "The column name of the survival/follow-up time variable.",
+          "type": "column",
+          "has_default_value": false,
+          "is_frontend_only": false
         },
         {
           "name": "outcome_col",
-          "type": "",
-          "description": ""
+          "display_name": "Event column",
+          "description": "The column name of the event indicator (1 = event occurred, 0 = censored).",
+          "type": "column",
+          "has_default_value": false,
+          "is_frontend_only": false
         },
         {
-          "name": "expl_var",
-          "type": "",
-          "description": ""
+          "name": "expl_vars",
+          "display_name": "Explanatory variables",
+          "description": "The column names of the covariates to include in the Cox model.",
+          "type": "column_list",
+          "has_default_value": false,
+          "is_frontend_only": false
         },
         {
           "name": "organization_ids",
-          "type": "",
-          "description": ""
+          "display_name": "Organizations to include",
+          "description": "The organizations to include in the computation. If not provided, all organizations in the collaboration are included.",
+          "type": "organization_list",
+          "has_default_value": true,
+          "default_value": null,
+          "is_frontend_only": false
+        }
+      ],
+      "databases": [
+        {
+          "name": "Database",
+          "description": "Database to use for the Cox model fit"
+        }
+      ]
+    },
+    {
+      "name": "get_unique_event_times",
+      "display_name": "Unique event times per data station",
+      "description": "Collect unique event times (and their frequency) from a single data station.",
+      "standalone": true,
+      "step_type": "federated_compute",
+      "ui_visualizations": [],
+      "arguments": [
+        {
+          "name": "time_col",
+          "display_name": "Time column",
+          "description": "The column name of the survival/follow-up time variable.",
+          "type": "column",
+          "has_default_value": false,
+          "is_frontend_only": false
+        },
+        {
+          "name": "outcome_col",
+          "display_name": "Event column",
+          "description": "The column name of the event indicator (1 = event occurred, 0 = censored).",
+          "type": "column",
+          "has_default_value": false,
+          "is_frontend_only": false
+        }
+      ],
+      "databases": [
+        {
+          "name": "Database",
+          "description": "Database to use for the Cox model fit"
+        }
+      ]
+    },
+    {
+      "name": "compute_summed_z",
+      "display_name": "Summed Z statistic per data station",
+      "description": "Compute the sum of the explanatory variables over the event rows at a single data station.",
+      "standalone": true,
+      "step_type": "federated_compute",
+      "ui_visualizations": [],
+      "arguments": [
+        {
+          "name": "outcome_col",
+          "display_name": "Event column",
+          "description": "The column name of the event indicator (1 = event occurred, 0 = censored).",
+          "type": "column",
+          "has_default_value": false,
+          "is_frontend_only": false
+        },
+        {
+          "name": "expl_vars",
+          "display_name": "Explanatory variables",
+          "description": "The column names of the covariates to include in the Cox model.",
+          "type": "column_list",
+          "has_default_value": false,
+          "is_frontend_only": false
+        }
+      ],
+      "databases": [
+        {
+          "name": "Database",
+          "description": "Database to use for the Cox model fit"
+        }
+      ]
+    },
+    {
+      "name": "perform_iteration",
+      "display_name": "Newton-Raphson iteration per data station",
+      "description": "Compute the local risk-set aggregates for one Newton-Raphson iteration of the partial likelihood at a single data station.",
+      "standalone": true,
+      "step_type": "federated_compute",
+      "ui_visualizations": [],
+      "arguments": [
+        {
+          "name": "time_col",
+          "display_name": "Time column",
+          "description": "The column name of the survival/follow-up time variable.",
+          "type": "column",
+          "has_default_value": false,
+          "is_frontend_only": false
+        },
+        {
+          "name": "expl_vars",
+          "display_name": "Explanatory variables",
+          "description": "The column names of the covariates to include in the Cox model.",
+          "type": "column_list",
+          "has_default_value": false,
+          "is_frontend_only": false
+        },
+        {
+          "name": "beta",
+          "display_name": "Beta coefficients",
+          "description": "Current estimate of the beta coefficients.",
+          "type": "float_list",
+          "has_default_value": false,
+          "is_frontend_only": false
+        },
+        {
+          "name": "unique_time_events",
+          "display_name": "Unique event times",
+          "description": "Global unique event times aggregated by the central step.",
+          "type": "float_list",
+          "has_default_value": false,
+          "is_frontend_only": false
+        }
+      ],
+      "databases": [
+        {
+          "name": "Database",
+          "description": "Database to use for the Cox model fit"
         }
       ]
     }

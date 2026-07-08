@@ -1,5 +1,5 @@
-# basic python3 image as base
-FROM harbor2.vantage6.ai/infrastructure/algorithm-base
+ARG BASE=5.0
+FROM ghcr.io/vantage6/infrastructure/algorithm-base:${BASE}
 
 # This is a placeholder that should be overloaded by invoking
 # docker build with '--build-arg PKG_NAME=...'
@@ -7,8 +7,7 @@ ARG PKG_NAME="coxph"
 
 # install federated algorithm
 COPY . /app
-RUN pip install /app
-
+RUN uv pip install --system -e /app
 
 # Set environment variable to make name of the package available within the
 # docker image.

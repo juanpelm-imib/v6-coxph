@@ -5,6 +5,7 @@ that the central method is executed on a node, just like any other method.
 The results in a return statement are sent to the vantage6 server (after
 encryption if that is enabled).
 """
+import json
 import math
 
 import numpy as np
@@ -12,11 +13,13 @@ import pandas as pd
 
 from scipy.stats import norm, chi2
 from scipy.linalg import solve
-from vantage6.algorithm.tools.util import info, warn, error
-from vantage6.algorithm.tools.decorators import algorithm_client
+from vantage6.common import info, warning, error, base64s_to_bytes
+from vantage6.algorithm.decorator.action import central
+from vantage6.algorithm.decorator.algorithm_client import algorithm_client
 from vantage6.algorithm.client import AlgorithmClient
 
 
+@central
 @algorithm_client
 def central(
         client: AlgorithmClient, time_col, outcome_col, expl_vars, organization_ids):
@@ -49,16 +52,6 @@ def central(
     n_covs = len(expl_vars)
     epochs = 10
 
-    # Define input parameters for a subtask - get unique event times
-    info("Defining input parameters for subtask - get unique event times")
-    input_ = {
-        "method": "get_unique_event_times",
-        "kwargs": {
-            "time_col": time_col,
-            "outcome_col": outcome_col
-        },
-    }
-
     n_loops = 0
     n_threshold_met = False
     while not n_threshold_met:
@@ -72,27 +65,53 @@ def central(
         # Create a subtask for all selected organizations in the collaboration.
         info("Creating subtask for all selected organizations in the collaboration")
         task = client.task.create(
-            input_=input_,
+            method="get_unique_event_times",
+            arguments={
+                "time_col": time_col,
+                "outcome_col": outcome_col,
+            },
             organizations=ids,
             name="Unique event times",
             description="Getting unique event times and their counts"
         )
 
-        # Wait for the node to return results of the subtask.
+        # Wait for the node to return results of the subtask. Federated-compute
+        # containers are not given an algorithm client in vantage6 v5, so
+        # `get_unique_event_times` cannot report its own organization id - we
+        # resolve organization per run here instead, via client.run.from_task.
+        # We fetch results via the list endpoint (result?task_id=..., already
+        # exercised successfully by wait_for_results/Result.from_task) rather
+        # than client.result.get(), which hits a broken node proxy endpoint in
+        # vantage6-node 5.0.2 (TypeError: proxy_results() got an unexpected
+        # keyword argument 'id'). Result and Run share the same underlying row
+        # and id in vantage6 v5, so we can correlate them by id.
         info("Waiting for results")
-        results = client.wait_for_results(task_id=task.get("id"))
+        client.wait_for_results(task_id=task.get("id"))
+        runs = client.run.from_task(task_id=task.get("id"))
+        raw_results = client._multi_page_request(
+            "result", params={"task_id": task.get("id")}
+        )
+        results_by_id = {
+            entry["id"]: json.loads(base64s_to_bytes(entry["result"]).decode())
+            for entry in raw_results
+            if entry.get("result")
+        }
         info("Results obtained!")
 
         unique_time_events = []
-        for output in results:
+        for run in runs:
+            org_id = run["organization"]["id"]
+            output = results_by_id.get(run["id"])
+            if output is None:
+                continue
 
             # Exclude organizations that do not meet the N-threshold
             if "N-Threshold not met" in output:
-                warn(f"Insufficient samples for organization {output['N-Threshold not met']}. "
-                     f"Excluding organization from analysis.")
-                ids.remove(output["N-Threshold not met"])
-                excluded_ids.append(output["N-Threshold not met"])
-                _excluded_ids.append(output["N-Threshold not met"])
+                warning(f"Insufficient samples for organization {org_id}. "
+                        f"Excluding organization from analysis.")
+                ids.remove(org_id)
+                excluded_ids.append(org_id)
+                _excluded_ids.append(org_id)
                 continue
 
             output = pd.DataFrame.from_dict(output["times"])
@@ -101,7 +120,7 @@ def central(
         if len(_excluded_ids) == 0:
             n_threshold_met = True
         elif len(ids) == 0:
-            warn("No organizations meet the minimal sample size threshold, returning NaN.")
+            warning("No organizations meet the minimal sample size threshold, returning NaN.")
             return {"excluded_organizations": excluded_ids, "table": np.nan}
 
     aggregated_time_events = pd.concat(unique_time_events)
@@ -110,20 +129,14 @@ def central(
     # Get the list of unique_time_events
     unique_time_events = aggregated_time_events[time_col].tolist()
 
-    # Define input parameters for a subtask - compute_summed_z
-    info("Defining input parameters for subtask - compute summed z")
-    input_ = {
-        "method": "compute_summed_z",
-        "kwargs": {
-            "outcome_col": outcome_col,
-            "expl_vars": expl_vars,
-        }
-    }
-
     # create a subtask for all organizations in the collaboration.
     info("Creating subtask for all organizations in the collaboration")
     task = client.task.create(
-        input_=input_,
+        method="compute_summed_z",
+        arguments={
+            "outcome_col": outcome_col,
+            "expl_vars": expl_vars,
+        },
         organizations=ids,
         name="Summed Z statistic",
         description="Computing the summed Z statistic"
@@ -145,25 +158,20 @@ def central(
         # JSON-serialize beta for Vantage6
         beta = beta.tolist()
 
-        # Define input parameters for a subtask - perform iterations
-        info("Defining input parameters for subtask - perform iterations")
-        input_ = {
-            "method": "perform_iteration",
-            "kwargs": {
-                'time_col': time_col,
-                "expl_vars": expl_vars,
-                'beta': beta,
-                'unique_time_events': unique_time_events
-            }
-        }
-
         # De-serialise beta again
+        beta_serialized = beta
         beta = np.array(beta)
 
         # create a subtask for all organizations in the collaboration.
         info("Creating subtask for all organizations in the collaboration")
         task = client.task.create(
-            input_=input_,
+            method="perform_iteration",
+            arguments={
+                'time_col': time_col,
+                "expl_vars": expl_vars,
+                'beta': beta_serialized,
+                'unique_time_events': unique_time_events
+            },
             organizations=ids,
             name="Start iteration",
             description="Iterating to find the optimal beta"
@@ -232,7 +240,7 @@ def central(
                     # Check for numerical issues before computing log
                     if summed_agg1[i] <= 0:
                         # Risk of negative or zero due to noise in DP setting
-                        warn(f"Risk set sum is non-positive at time index {i}: {summed_agg1[i]}")
+                        warning(f"Risk set sum is non-positive at time index {i}: {summed_agg1[i]}")
                         continue
                     risk_set_part += freq * np.log(summed_agg1[i])
 
@@ -247,11 +255,11 @@ def central(
         aic = -2 * log_likelihood + 2 * n_params
 
     except (ValueError, IndexError, FloatingPointError) as e:
-        warn(f"Could not compute AIC due to numerical/data issue: {e}")
+        warning(f"Could not compute AIC due to numerical/data issue: {e}")
         aic = np.nan
         n_params = len(beta)
     except Exception as e:
-        warn(f"Unexpected error computing AIC: {e}")
+        warning(f"Unexpected error computing AIC: {e}")
         aic = np.nan
         n_params = len(beta)
 
@@ -280,7 +288,7 @@ def central(
                 f"Warning: Covariate '{row['Var']}' may perfectly predict the event "
                 f"(coef={coef}, SE={se}). Results may be unreliable."
             )
-            warn(msg)
+            warning(msg)
             warnings.append(msg)
 
     return {"included_organizations": ids,

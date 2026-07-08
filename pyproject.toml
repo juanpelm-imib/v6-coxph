@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "coxph"
+version = "1.0.2"
+description = "Federated algorithm for a Cox proportional hazards model"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "vantage6-algorithm-tools>=5.0.1",
+  "numpy",
+  "pandas",
+  "scipy",
+]
+authors = [
+  { name = "VG" },
+]
+license = { text = "Apache-2.0" }
+keywords = ["vantage6", "algorithm", "federated-learning", "cox-proportional-hazards"]
+
+[project.urls]
+Homepage = "https://github.com/MaastrichtU-CDS/v6-coxph"
+Repository = "https://github.com/MaastrichtU-CDS/v6-coxph"
+
+[tool.hatch.build.targets.wheel]
+packages = ["coxph"]
+
+[dependency-groups]
+dev = [
+  "pytest",
+]

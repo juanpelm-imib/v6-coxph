@@ -9,21 +9,22 @@ or directly to the user (if they requested partial results).
 import numpy as np
 import pandas as pd
 
-from vantage6.algorithm.tools.util import info, warn
-from vantage6.algorithm.tools.decorators import algorithm_client
-from vantage6.algorithm.tools.decorators import data
-from vantage6.algorithm.client import AlgorithmClient
+from vantage6.common import info, warning
+from vantage6.algorithm.decorator.action import federated
+from vantage6.algorithm.decorator.data import dataframe
 
 
-@data(1)
-@algorithm_client
-def get_unique_event_times(client: AlgorithmClient, df: pd.DataFrame, time_col, outcome_col):
+@federated
+@dataframe(1)
+def get_unique_event_times(df: pd.DataFrame, time_col, outcome_col):
     """
     This function retrieves unique event times from the provided DataFrame.
-    If the number of samples is too small, the sub-task is halted and returns the organization ID.
+    If the number of samples is too small, the sub-task is halted and returns a
+    sentinel value. Federated-compute containers are not given an algorithm
+    client in vantage6 v5, so the calling organization cannot be reported from
+    here - the central step resolves it via `client.run.from_task`.
 
     Parameters:
-    client (AlgorithmClient): The client instance used to interact with the vantage6 server.
     df (pandas.DataFrame): The DataFrame containing the data.
     time_col (str): The name of the column in the DataFrame that contains the time data.
     outcome_col (str): The name of the column in the DataFrame that contains the outcome data.
@@ -35,8 +36,8 @@ def get_unique_event_times(client: AlgorithmClient, df: pd.DataFrame, time_col, 
     info("Computing unique event times")
 
     if df[outcome_col].notnull().sum() <= 10:
-        warn("Sub-task was not executed because the number of samples is too small (n <= 10)")
-        return {"N-Threshold not met": client.organization_id}
+        warning("Sub-task was not executed because the number of samples is too small (n <= 10)")
+        return {"N-Threshold not met": True}
 
     times = df[df[outcome_col] == 1].groupby(time_col, as_index=False).count()
     times = times.sort_values(by=time_col)[[time_col, outcome_col]]
@@ -45,14 +46,13 @@ def get_unique_event_times(client: AlgorithmClient, df: pd.DataFrame, time_col, 
     return {'times': times.to_dict()}
 
 
-@data(1)
-@algorithm_client
-def compute_summed_z(client: AlgorithmClient, df: pd.DataFrame, outcome_col, expl_vars):
+@federated
+@dataframe(1)
+def compute_summed_z(df: pd.DataFrame, outcome_col, expl_vars):
     """
     This function computes the sum of the specified explanatory variables for the outcome events.
 
     Parameters:
-    client (AlgorithmClient): The client instance used to interact with the vantage6 server.
     df (pandas.DataFrame): The DataFrame containing the data.
     outcome_col (str): The name of the column in the DataFrame that contains the outcome data.
     expl_vars (list): A list of explanatory variables to be used in the computation.
@@ -65,14 +65,13 @@ def compute_summed_z(client: AlgorithmClient, df: pd.DataFrame, outcome_col, exp
     return {'sum': z_sum}
 
 
-@data(1)
-@algorithm_client
-def perform_iteration(client: AlgorithmClient, df: pd.DataFrame, time_col, expl_vars, beta, unique_time_events):
+@federated
+@dataframe(1)
+def perform_iteration(df: pd.DataFrame, time_col, expl_vars, beta, unique_time_events):
     """
     This function performs an iteration of the algorithm, computing the necessary aggregates.
 
     Parameters:
-    client (AlgorithmClient): The client instance used to interact with the vantage6 server.
     df (pandas.DataFrame): The DataFrame containing the data.
     time_col (str): The name of the column in the DataFrame that contains the time data.
     expl_vars (list): A list of explanatory variables to be used in the computation.

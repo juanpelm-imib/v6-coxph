@@ -1,6 +1,10 @@
 
 # coxph
 
+> Migrated from vantage6 v4 to v5.0.2 for this deployment - see
+> [`MIGRATION.md`](MIGRATION.md) for the full migration process and the
+> version history of bugs found (and fixed) along the way.
+
 Federated algorithm for a coxph model in Vantage6 v4
 
 Please refer to the Wiki for more information on how to use this algorithm.
