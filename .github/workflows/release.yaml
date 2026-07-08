@@ -7,43 +7,23 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_NAME: coxph
 
 jobs:
   build-and-push-image:
-    runs-on:  ubuntu-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages:  write
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all history to determine branch
-
-      - name:  Determine branch name from tag
-        id: get_branch
-        run: |
-          # Get the branch that contains this tag
-          BRANCH=$(git branch -r --contains ${{ github.ref }} | grep -v HEAD | head -n 1 | sed 's/.*origin\///')
-          echo "Branch detected: $BRANCH"
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-
-      - name: Set image name based on branch
-        run: |
-          REPO_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
-          BRANCH_NAME=$(echo ${{ steps.get_branch.outputs.branch }} | sed 's/\//-/g')
-          
-          # Create image name with branch suffix
-          echo "IMAGE_NAME=${REPO_LOWER}-${BRANCH_NAME}" >> $GITHUB_ENV
-          echo "IMAGE_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
-          
-          echo "Building image:  ${REPO_LOWER}-${BRANCH_NAME}:${{ github.ref_name }}"
 
       - name: Log in to the Container registry
         uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github. actor }}
+          username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
@@ -51,4 +31,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
