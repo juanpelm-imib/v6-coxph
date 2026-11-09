@@ -206,7 +206,7 @@ def central(
         SErrors.append(np.sqrt(fisher[k, k]))
 
     # Calculating P and Z values
-    zvalues = (np.exp(beta) - 1) / np.array(SErrors)
+    zvalues = beta / np.array(SErrors)
     pvalues = 2 * norm.cdf(-abs(zvalues))
 
     # Calculate overall model significance using Wald test
